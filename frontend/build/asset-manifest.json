@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "/static/css/main.0b3949fa.css",
+    "main.js": "/static/js/main.819773c1.js",
+    "static/media/geist-latin-wght-normal.woff2": "/static/media/geist-latin-wght-normal.b6d36758f81d66419294.woff2",
+    "static/media/geist-latin-ext-wght-normal.woff2": "/static/media/geist-latin-ext-wght-normal.a031cf03e58722ec791f.woff2",
+    "static/media/geist-cyrillic-wght-normal.woff2": "/static/media/geist-cyrillic-wght-normal.2b2e7498907c4475037e.woff2",
+    "index.html": "/index.html",
+    "main.0b3949fa.css.map": "/static/css/main.0b3949fa.css.map",
+    "main.819773c1.js.map": "/static/js/main.819773c1.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.0b3949fa.css",
+    "static/js/main.819773c1.js"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rm -f frontend/src/App.jsx frontend/src/main.jsx frontend/src/App.css frontend/src/assets/react.svg frontend/src/assets/vite.svg frontend/src/assets/fonts/desktop.ini frontend/src/components/AdminLayout.js frontend/src/components/AuditorLayout.js frontend/src/components/SuperAdminLayout.js frontend/src/pages/Register.js frontend/src/pages/superadmin/Dashboard.js frontend/src/pages/superadmin/UserManagement.js)",
+      "Bash(rm -rf \"frontend/src/pages/auditor\")"
+    ]
+  }
+}

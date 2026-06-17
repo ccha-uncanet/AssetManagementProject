@@ -1,0 +1,8 @@
+node_modules/
+.env
+# เปิด .gitignore แล้วเพิ่มบรรทัดเหล่านี้
+backend/.env
+frontend/.env
+frontend/node_modules/
+backend/node_modules/
+mobile/node_modules/
