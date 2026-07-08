@@ -105,7 +105,7 @@ export const ROLE_DEFAULT_PERMISSIONS = {
 export const NAV_ITEMS = [
   {
     key: 'dashboard',
-    label: 'Dashboard',
+    label: 'ภาพรวม',
     icon: 'LayoutDashboard',
     path: '/app/dashboard',
     permission: PERMISSIONS.VIEW_DASHBOARD,
@@ -115,6 +115,27 @@ export const NAV_ITEMS = [
     label: 'จัดการทรัพย์สิน',
     icon: 'Package',
     path: '/app/assets',
+    permission: PERMISSIONS.VIEW_ASSETS,
+  },
+  {
+    key: 'categories',
+    label: 'หมวดหมู่',
+    icon: 'Tag',
+    path: '/app/categories',
+    permission: PERMISSIONS.VIEW_ASSETS,
+  },
+  {
+    key: 'borrows',
+    label: 'การยืม',
+    icon: 'BookOpen',
+    path: '/app/borrows',
+    permission: PERMISSIONS.VIEW_ASSETS,
+  },
+  {
+    key: 'repairs',
+    label: 'การแจ้งซ่อม',
+    icon: 'Wrench',
+    path: '/app/repairs',
     permission: PERMISSIONS.VIEW_ASSETS,
   },
   {
@@ -179,5 +200,12 @@ export const NAV_ITEMS = [
     icon: 'ScrollText',
     path: '/app/logs',
     permission: PERMISSIONS.VIEW_LOGS,
+  },
+  {
+    key: 'settings',
+    label: 'ตั้งค่าระบบ',
+    icon: 'Settings',
+    path: '/app/settings',
+    permission: PERMISSIONS.SYSTEM_SETTINGS,
   },
 ];

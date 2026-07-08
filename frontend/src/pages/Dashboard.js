@@ -15,8 +15,7 @@ import {
 import RepairRequests from './RepairRequests';
 import BorrowRequests from './BorrowRequests';
 
-// ── Feature flag: เปลี่ยนเป็น true เมื่อ Backend /repair-requests/counts พร้อม ──
-const REPAIR_API_READY = false;
+const REPAIR_API_READY = true;
 
 // ── สี ────────────────────────────────────────────────────────────────────────
 const COLORS = {

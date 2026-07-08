@@ -72,9 +72,12 @@
   body {
     @apply bg-background text-foreground;
     margin: 0;
+    overflow: hidden;
   }
   html {
     @apply font-sans;
+    overflow: hidden;
+    height: 100%;
   }
 
   /* ✅ Reset #root ให้ไม่ขัด layout */
@@ -88,3 +91,65 @@
     display: block;
   }
 }
+
+/* ── Dark mode overrides for hardcoded Tailwind gray utilities ───────────── */
+/* These cover all pages without needing dark: on every element */
+
+/* Backgrounds */
+.dark .bg-white   { background-color: rgb(31 41 55); }   /* gray-800 */
+.dark .bg-gray-50 { background-color: rgb(17 24 39); }   /* gray-900 */
+.dark .bg-gray-100 { background-color: rgb(55 65 81); }  /* gray-700 */
+.dark .bg-gray-200 { background-color: rgb(75 85 99); }  /* gray-600 */
+
+/* Text */
+.dark .text-gray-900 { color: rgb(249 250 251); }  /* gray-50  */
+.dark .text-gray-800 { color: rgb(243 244 246); }  /* gray-100 */
+.dark .text-gray-700 { color: rgb(229 231 235); }  /* gray-200 */
+.dark .text-gray-600 { color: rgb(209 213 219); }  /* gray-300 */
+.dark .text-gray-500 { color: rgb(156 163 175); }  /* gray-400 */
+.dark .text-gray-400 { color: rgb(107 114 128); }  /* gray-500 */
+.dark .text-gray-300 { color: rgb(75 85 99); }     /* gray-600 */
+
+/* Borders */
+.dark .border-gray-100 { border-color: rgb(55 65 81); }  /* gray-700 */
+.dark .border-gray-200 { border-color: rgb(55 65 81); }  /* gray-700 */
+.dark .border-gray-300 { border-color: rgb(75 85 99); }  /* gray-600 */
+
+/* Hover backgrounds */
+.dark .hover\:bg-gray-50:hover  { background-color: rgb(55 65 81); }
+.dark .hover\:bg-gray-100:hover { background-color: rgb(55 65 81); }
+.dark .hover\:bg-gray-200:hover { background-color: rgb(75 85 99); }
+
+/* Divide lines */
+.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(55 65 81); }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: rgb(55 65 81); }
+
+/* Sticky / thead backgrounds — tables */
+.dark thead.bg-gray-50,
+.dark thead > tr.bg-gray-50,
+.dark tr.bg-gray-50 { background-color: rgb(17 24 39); }
+.dark thead { background-color: rgb(31 41 55); }
+
+/* Form inputs */
+.dark input:not([type=checkbox]):not([type=radio]):not([type=range]),
+.dark textarea,
+.dark select {
+  background-color: rgb(31 41 55);
+  color: rgb(229 231 235);
+  border-color: rgb(55 65 81);
+}
+.dark input::placeholder,
+.dark textarea::placeholder { color: rgb(107 114 128); }
+
+/* Focus rings on inputs */
+.dark input:focus,
+.dark textarea:focus,
+.dark select:focus {
+  border-color: rgb(96 165 250);   /* blue-400 */
+  outline-color: rgb(96 165 250);
+}
+
+/* Scrollbars (Webkit) */
+.dark ::-webkit-scrollbar-track { background: rgb(17 24 39); }
+.dark ::-webkit-scrollbar-thumb { background: rgb(75 85 99); border-radius: 4px; }
+.dark ::-webkit-scrollbar-thumb:hover { background: rgb(107 114 128); }

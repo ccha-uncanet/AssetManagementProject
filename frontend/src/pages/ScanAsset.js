@@ -11,7 +11,7 @@ import {
   ScanLine, Search, X, Loader2, AlertTriangle, CheckCircle2,
   Package, Wrench, ArrowDownToLine, ArrowUpFromLine, RefreshCw,
   Pencil, Save, Tag, MapPin, Hash, Calendar, DollarSign,
-  ChevronRight, Info
+  ChevronRight, Info, Wifi
 } from 'lucide-react';
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -248,9 +248,12 @@ const ScanAsset = () => {
   const [isScanning, setIsScanning]   = useState(false);
 
   const inputRef = useRef(null);
+  const rfidRef  = useRef(null);
   const { can } = usePermission();
+  const [rfidMode, setRfidMode] = useState(false);
 
   useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (rfidMode) rfidRef.current?.focus(); }, [rfidMode]);
   useEffect(() => {
     api.get('/assets/categories').then(r => setCategories(r.data)).catch(() => {});
   }, []);
@@ -290,12 +293,23 @@ const ScanAsset = () => {
       // 2. ถ้าค้นหาด้วย ID ตรงๆ ไม่เจอ ค่อยสลับมาสแกนหาข้อความในคลังทรัพย์สินทั้งหมดที่มี (InvNo, ชื่อ, S/N)
       const allRes = await api.get('/assets');
       const keyword = q.toLowerCase();
+      // Exact RFID tag match first (readers output the full tag + Enter)
+      const rfidExact = allRes.data.find(a => a.RfidTag && a.RfidTag.toLowerCase() === keyword);
+      if (rfidExact) {
+        setAssetData(rfidExact);
+        setScanId('');
+        setLoading(false);
+        if (rfidMode) rfidRef.current?.focus();
+        return;
+      }
+
       const found = allRes.data.filter(a =>
         a.InvNo?.toLowerCase().includes(keyword) ||
         a.Name?.toLowerCase().includes(keyword) ||
         a.SerialNumber?.toLowerCase().includes(keyword) ||
         a.Location?.toLowerCase().includes(keyword) ||
-        a.Category?.toLowerCase().includes(keyword)
+        a.Category?.toLowerCase().includes(keyword) ||
+        (a.RfidTag && a.RfidTag.toLowerCase().includes(keyword))
       );
 
       if (found.length === 1) {
@@ -313,7 +327,8 @@ const ScanAsset = () => {
       setScanId('');
     } finally {
       setLoading(false);
-      inputRef.current?.focus();
+      if (rfidMode) rfidRef.current?.focus();
+      else inputRef.current?.focus();
     }
   };
 
@@ -401,66 +416,113 @@ const ScanAsset = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">สแกนทรัพย์สิน</h1>
-        <p className="text-sm text-gray-500 mt-0.5">ค้นหาด้วย QR Code, InvNo, ชื่อ, S/N, สถานที่ หรือหมวดหมู่</p>
+        <p className="text-sm text-gray-500 mt-0.5">ค้นหาด้วย QR Code, RFID, InvNo, ชื่อ, S/N, สถานที่ หรือหมวดหมู่</p>
       </div>
 
-      {/* ── 5. ปุ่มเปิดกล้องสแกนสไตล์มือถือ (เพิ่มเข้ามาด้านบนช่องค้นหาเพื่อให้กดง่าย) ── */}
-      <button
-        type="button"
-        onClick={() => { setIsScanning(!isScanning); setErrorMsg(''); setAssetData(null); }}
-        className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200
-          ${isScanning 
-            ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse' 
-            : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'}`}
-      >
-        {isScanning ? (
-          <>❌ ปิดหน้าต่างกล้องสแกน</>
-        ) : (
-          <><ScanLine size={18} /> เปิดกล้องสแกน QR / Barcode ทรัพย์สิน</>
-        )}
-      </button>
+      {/* Mode switcher */}
+      <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit">
+        <button
+          onClick={() => setRfidMode(false)}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${!rfidMode ? 'bg-white shadow-sm text-blue-700' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <ScanLine size={15}/> QR / ค้นหา
+        </button>
+        <button
+          onClick={() => { setRfidMode(true); setIsScanning(false); setErrorMsg(''); setAssetData(null); }}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-all ${rfidMode ? 'bg-white shadow-sm text-violet-700' : 'text-gray-500 hover:text-gray-700'}`}
+        >
+          <Wifi size={15}/> RFID Reader
+        </button>
+      </div>
 
-      {/* ── 6. หน้าจอแสดงผลกล้องสแกน (ถ้ากดเปิดปุ่มกล้องจะโผล่มาตรงนี้) ────────────────── */}
-      {isScanning && (
-        <div className="bg-white border-2 border-dashed border-blue-400 rounded-2xl p-4 shadow-inner overflow-hidden">
-          <AssetScanner onScanSuccess={handleCameraScanSuccess} />
-        </div>
+      {/* QR / Search mode */}
+      {!rfidMode && (
+        <>
+          <button
+            type="button"
+            onClick={() => { setIsScanning(!isScanning); setErrorMsg(''); setAssetData(null); }}
+            className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 shadow-sm transition-all duration-200
+              ${isScanning
+                ? 'bg-red-500 hover:bg-red-600 text-white animate-pulse'
+                : 'bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white'}`}
+          >
+            {isScanning ? <>❌ ปิดหน้าต่างกล้องสแกน</> : <><ScanLine size={18}/> เปิดกล้องสแกน QR / Barcode ทรัพย์สิน</>}
+          </button>
+
+          {isScanning && (
+            <div className="bg-white border-2 border-dashed border-blue-400 rounded-2xl p-4 shadow-inner overflow-hidden">
+              <AssetScanner onScanSuccess={handleCameraScanSuccess} onClose={() => setIsScanning(false)} />
+            </div>
+          )}
+
+          <form onSubmit={handleScan} className="flex gap-3">
+            <div className="relative flex-1">
+              <ScanLine size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-500"/>
+              <input
+                ref={inputRef}
+                type="text"
+                placeholder="พิมพ์ InvNo / ชื่อ / S/N / สถานที่..."
+                value={scanId}
+                onChange={e => { setScanId(e.target.value); setErrorMsg(''); }}
+                className="w-full pl-10 pr-4 py-3 text-sm border-2 border-blue-300 rounded-xl focus:outline-none focus:border-blue-500 bg-blue-50/30"
+              />
+              {scanId && (
+                <button type="button" onClick={() => { setScanId(''); setErrorMsg(''); inputRef.current?.focus(); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+                  <X size={16}/>
+                </button>
+              )}
+            </div>
+            <button type="submit" disabled={loading || !scanId.trim()}
+              className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
+              {loading ? <Loader2 size={16} className="animate-spin"/> : <Search size={16}/>}
+              ค้นหา
+            </button>
+          </form>
+
+          <div className="flex flex-wrap gap-2 text-xs text-gray-400">
+            {['QR Code / Asset ID','InvNo','ชื่อทรัพย์สิน','Serial Number','สถานที่','หมวดหมู่'].map(hint => (
+              <span key={hint} className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
+                <ChevronRight size={10}/>{hint}
+              </span>
+            ))}
+          </div>
+        </>
       )}
 
-      {/* Search bar */}
-      <form onSubmit={handleScan} className="flex gap-3">
-        <div className="relative flex-1">
-          <ScanLine size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-blue-500"/>
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="หรือพิมพ์ InvNo / ชื่อ / S/N / สถานที่..."
-            value={scanId}
-            onChange={e => { setScanId(e.target.value); setErrorMsg(''); }}
-            className="w-full pl-10 pr-4 py-3 text-sm border-2 border-blue-300 rounded-xl focus:outline-none focus:border-blue-500 bg-blue-50/30"
-          />
-          {scanId && (
-            <button type="button" onClick={() => { setScanId(''); setErrorMsg(''); inputRef.current?.focus(); }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <X size={16}/>
-            </button>
-          )}
+      {/* RFID mode */}
+      {rfidMode && (
+        <div className="space-y-3">
+          <div className="bg-violet-50 border-2 border-violet-300 rounded-2xl p-5 flex flex-col items-center gap-3">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center ${loading ? 'bg-violet-200 animate-pulse' : 'bg-violet-100'}`}>
+              {loading ? <Loader2 size={24} className="text-violet-600 animate-spin"/> : <Wifi size={24} className="text-violet-600"/>}
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-violet-800 text-sm">พร้อมรับสัญญาณ RFID</p>
+              <p className="text-xs text-violet-500 mt-0.5">เชื่อมต่อ USB RFID Reader แล้วสแกน Tag ได้เลย</p>
+            </div>
+            <form onSubmit={handleScan} className="w-full">
+              <input
+                ref={rfidRef}
+                type="text"
+                value={scanId}
+                onChange={e => { setScanId(e.target.value); setErrorMsg(''); }}
+                placeholder="รอรับสัญญาณ RFID... (คลิกที่นี่ก่อนสแกน)"
+                className="w-full px-4 py-3 text-sm font-mono border-2 border-violet-300 rounded-xl focus:outline-none focus:border-violet-500 bg-white text-center tracking-widest"
+              />
+            </form>
+            {scanId && (
+              <button type="button" onClick={() => { setScanId(''); setErrorMsg(''); rfidRef.current?.focus(); }}
+                className="text-xs text-violet-400 hover:text-violet-600 flex items-center gap-1">
+                <X size={12}/> ล้าง
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-gray-400 text-center">
+            RFID Reader จะพิมพ์ Tag ID และกด Enter อัตโนมัติ — ระบบจะค้นหาทรัพย์สินทันที
+          </p>
         </div>
-        <button type="submit" disabled={loading || !scanId.trim()}
-          className="flex items-center gap-2 px-5 py-3 bg-blue-600 text-white text-sm font-semibold rounded-xl hover:bg-blue-700 disabled:opacity-50 transition-colors">
-          {loading ? <Loader2 size={16} className="animate-spin"/> : <Search size={16}/>}
-          ค้นหา
-        </button>
-      </form>
-
-      {/* Search hints */}
-      <div className="flex flex-wrap gap-2 text-xs text-gray-400">
-        {['QR Code / Asset ID','InvNo','ชื่อทรัพย์สิน','Serial Number','สถานที่','หมวดหมู่'].map(hint => (
-          <span key={hint} className="flex items-center gap-1 bg-gray-100 px-2 py-1 rounded-full">
-            <ChevronRight size={10}/>{hint}
-          </span>
-        ))}
-      </div>
+      )}
 
       {/* Error */}
       {errorMsg && (
@@ -512,6 +574,14 @@ const ScanAsset = () => {
                 </div>
               ))}
             </div>
+
+            {/* RFID tag */}
+            {assetData.RfidTag && (
+              <div className="flex items-center gap-2 bg-violet-50 border border-violet-100 rounded-xl px-4 py-2.5">
+                <Wifi size={13} className="text-violet-500 flex-shrink-0"/>
+                <p className="text-xs text-violet-700 font-mono truncate">{assetData.RfidTag}</p>
+              </div>
+            )}
 
             {/* Asset ID */}
             <div className="flex items-center gap-2 bg-gray-50 rounded-xl px-4 py-2.5">

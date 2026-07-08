@@ -10,7 +10,7 @@ import { exportPDF } from '../utils/exportPDF';
 import {
   Plus, Search, Download, FileText, Printer, QrCode,
   Trash2, X, Loader2, Package, AlertTriangle, CheckCircle2,
-  Filter, Eye, Pencil, ChevronLeft, Save, Tag, ShieldOff
+  Filter, Eye, Pencil, ChevronLeft, Save, Tag, ShieldOff, Wifi
 } from 'lucide-react';
 
 // ── Status config ─────────────────────────────────────────────────────────────
@@ -55,6 +55,7 @@ const AssetDetail = ({ asset, categories, onClose, onSave, canEdit, canDelete, o
         invNo:         form.InvNo       || form.invNo       || '',
         location:      form.Location    || form.location    || '',
         category,
+        rfidTag:       form.RfidTag     || form.rfidTag     || '',
       };
       await onSave(asset.Id, payload);
       setEditMode(false);
@@ -177,6 +178,31 @@ const AssetDetail = ({ asset, categories, onClose, onSave, canEdit, canDelete, o
                 <label className="block text-xs font-medium text-gray-600 mb-1.5">รายละเอียด</label>
                 <textarea value={form.Description || ''} onChange={e => setForm(p => ({ ...p, Description: e.target.value }))} rows={3} disabled={saving} className={`${inputCls} resize-none`} />
               </div>
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
+                  <Wifi size={12} className="text-violet-500" /> RFID Tag
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={form.RfidTag || ''}
+                    onChange={e => setForm(p => ({ ...p, RfidTag: e.target.value }))}
+                    disabled={saving}
+                    placeholder="เชื่อมต่อ RFID Reader แล้วสแกน หรือพิมพ์ Tag ID..."
+                    className={`${inputCls} font-mono pr-20`}
+                  />
+                  {form.RfidTag && (
+                    <button
+                      type="button"
+                      onClick={() => setForm(p => ({ ...p, RfidTag: '' }))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-red-400 hover:text-red-600 px-2 py-0.5 rounded"
+                    >
+                      ล้าง
+                    </button>
+                  )}
+                </div>
+                <p className="text-xs text-gray-400 mt-1">คลิกที่ช่องนี้แล้วสแกน RFID Reader จะพิมพ์ Tag ID อัตโนมัติ</p>
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -204,6 +230,18 @@ const AssetDetail = ({ asset, categories, onClose, onSave, canEdit, canDelete, o
                   <p className="text-sm text-gray-700">{asset.Description}</p>
                 </div>
               )}
+              <div className="sm:col-span-2 bg-gray-50 rounded-xl p-3">
+                <p className="text-xs text-gray-400 mb-1 flex items-center gap-1.5">
+                  <Wifi size={11} className="text-violet-500" /> RFID Tag
+                </p>
+                {asset.RfidTag ? (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-violet-100 text-violet-700 rounded-lg text-xs font-mono font-medium">
+                    <Wifi size={11} /> {asset.RfidTag}
+                  </span>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">ยังไม่ได้ผูก RFID Tag</p>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -271,7 +309,7 @@ const AssetManagement = () => {
   const fetchCategories = useCallback(async () => {
     try {
       const res = await api.get('/assets/categories');
-      setCategories(res.data);
+      setCategories(res.data.map(r => r.Category));
     } catch { console.error('fetch categories error'); }
   }, []);
 
@@ -311,20 +349,12 @@ const AssetManagement = () => {
 
   const handleUpdate = async (id, data) => {
     try {
-      await api.put(`/assets/${id}`, data);
+      const res = await api.put(`/assets/${id}`, data);
+      const updated = res.data?.asset || { ...data, Id: id };
       showToast('อัปเดตทรัพย์สินสำเร็จ');
-      setAssets(prev => prev.map(a => a.Id === id ? {
-        ...a, ...data,
-        Name: data.name || data.Name,
-        InvNo: data.invNo ?? data.InvNo,
-        Category: data.category ?? data.Category,
-        Location: data.location ?? data.Location,
-        SerialNumber: data.serialNumber ?? data.SerialNumber,
-        PurchaseDate: data.purchaseDate ?? data.PurchaseDate,
-        PurchasePrice: data.purchasePrice ?? data.PurchasePrice,
-        Status: data.status ?? data.Status,
-        Description: data.description ?? data.Description,
-      } : a));
+      // Refresh the detail panel with the server's response so all fields (incl. RfidTag) reflect truth
+      setSelectedAsset(prev => prev && prev.Id === id ? { ...prev, ...updated } : prev);
+      setAssets(prev => prev.map(a => a.Id === id ? { ...a, ...updated } : a));
       fetchAssets();
       fetchCategories();
 

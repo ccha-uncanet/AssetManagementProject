@@ -216,8 +216,90 @@ const getUserLogs = async (req, res) => {
     }
 };
 
+// ── DB Settings ───────────────────────────────────────────────────────────────
+const fs      = require('fs');
+const path    = require('path');
+const dotenv  = require('dotenv');
+const mssql   = require('mssql');
+const { connectDB } = require('../config/db');
+
+const ENV_PATH = path.resolve(__dirname, '../.env');
+
+function readEnv() {
+    return dotenv.parse(fs.readFileSync(ENV_PATH, 'utf8'));
+}
+
+function writeEnv(updates) {
+    const merged  = { ...readEnv(), ...updates };
+    const content = Object.entries(merged).map(([k, v]) => `${k}=${v}`).join('\n');
+    fs.writeFileSync(ENV_PATH, content + '\n', 'utf8');
+    Object.entries(updates).forEach(([k, v]) => { process.env[k] = v; });
+}
+
+const getDbSettings = (req, res) => {
+    try {
+        const env = readEnv();
+        res.json({
+            server:   env.DB_SERVER   || '',
+            port:     env.DB_PORT     || '1433',
+            instance: env.DB_INSTANCE || '',
+            database: env.DB_NAME     || '',
+            user:     env.DB_USER     || '',
+            password: env.DB_PASSWORD ? '••••••' : '',
+            hasPassword: !!env.DB_PASSWORD,
+        });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
+const testDbConnection = async (req, res) => {
+    let { server, port, instance, database, user, password } = req.body;
+    if (!password || password === '__KEEP__') {
+        password = readEnv().DB_PASSWORD || '';
+    }
+    let testPool;
+    try {
+        testPool = new mssql.ConnectionPool({
+            user, password, server, database,
+            port: parseInt(port) || 1433,
+            connectionTimeout: 8000,
+            options: { encrypt: false, trustServerCertificate: true, instanceName: instance || '' },
+        });
+        await testPool.connect();
+        await testPool.close();
+        res.json({ ok: true, message: 'เชื่อมต่อสำเร็จ' });
+    } catch (err) {
+        if (testPool) testPool.close().catch(() => {});
+        res.json({ ok: false, message: err.message });
+    }
+};
+
+const updateDbSettings = async (req, res) => {
+    const { server, port, instance, database, user, password, keepPassword } = req.body;
+    try {
+        const updates = {
+            DB_SERVER:   server,
+            DB_PORT:     port || '1433',
+            DB_INSTANCE: instance || '',
+            DB_NAME:     database,
+            DB_USER:     user,
+        };
+        // Only overwrite password if a new one was provided
+        if (!keepPassword && password && !password.startsWith('••')) {
+            updates.DB_PASSWORD = password;
+        }
+        writeEnv(updates);
+        await connectDB();
+        res.json({ ok: true, message: 'บันทึกและเชื่อมต่อใหม่สำเร็จ' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 module.exports = {
     getSystemStats, getAllUsers, changeUserRole,
     deleteUser, getRoles, updateRolePermissions,
     getLogs, getUserLogs,
+    getDbSettings, testDbConnection, updateDbSettings,
 };

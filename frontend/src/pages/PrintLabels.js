@@ -15,18 +15,23 @@ const DEFAULT_ZPL_TEMPLATE = `^XA
 ^PQ1,0,1,Y^XZ`;
 
 const FIELDS = [
-  { name: 'name',    label: 'ชื่อ (Name)',       type: 'text' },
-  { name: 'sku',     label: 'เลขครุภัณฑ์ (SKU)', type: 'text' },
-  { name: 'barcode', label: 'Barcode',            type: 'text' },
+  { name: 'name',     label: 'ชื่อ (Name)',         type: 'text' },
+  { name: 'sku',      label: 'เลขครุภัณฑ์ (SKU)',   type: 'text' },
+  { name: 'barcode',  label: 'Barcode',              type: 'text' },
+  { name: 'location', label: 'สถานที่ (Location)',   type: 'text' },
+  { name: 'date',     label: 'วันที่ (Date)',         type: 'text' },
+  { name: 'time',     label: 'เวลา (Time)',           type: 'text' },
 ];
 
 const ZPL_SNIPPETS = {
-  'Line 1':  '^FO10,15^A0N,36,36^FD{{L.name}}^FS',
-  'Line 2':  '^FO10,58^A0N,24,24^FD{{L.sku}}^FS',
-  'Barcode': '^FO10,92^BCN,50,Y,N,N^FD{{L.barcode}}^FS',
-  'QR Code': '^FO10,92^BQN,2,4^FDQA,{{L.barcode}}^FS',
-  'Box':     '^FO5,5^GB390,190,2^FS',
-  'Divider': '^FO400,0^GB1,200,2^FS',
+  'Line 1':    '^FO10,15^A0N,36,36^FD{{L.name}}^FS',
+  'Line 2':    '^FO10,58^A0N,24,24^FD{{L.sku}}^FS',
+  'Barcode':   '^FO10,92^BCN,50,Y,N,N^FD{{L.barcode}}^FS',
+  'QR Code':   '^FO10,92^BQN,2,4^FDQA,{{L.barcode}}^FS',
+  'Location':  '^FO10,155^A0N,20,20^FD{{L.location}}^FS',
+  'Date/Time': '^FO10,175^A0N,20,20^FD{{L.date}} {{L.time}}^FS',
+  'Box':       '^FO5,5^GB390,190,2^FS',
+  'Divider':   '^FO400,0^GB1,200,2^FS',
 };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -111,16 +116,6 @@ const PrinterSelector = ({ printers, selected, onSelect, onRefresh, loading, err
             {printers.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
 
-          <div className="space-y-1">
-            <p className="text-xs text-slate-400">หรือพิมพ์ชื่อเครื่องพิมพ์เอง:</p>
-            <input
-              type="text"
-              value={manual}
-              onChange={handleManual}
-              placeholder="เช่น ZDesigner ZD230-203dpi ZPL"
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
-          </div>
         </>
       )}
 
@@ -131,25 +126,30 @@ const PrinterSelector = ({ printers, selected, onSelect, onRefresh, loading, err
         </div>
       )}
 
-      {/* ZebraPress status hint */}
-      <div className="text-xs text-slate-400 bg-slate-50 rounded-lg px-3 py-2 space-y-1">
-        <p className="font-medium text-slate-500">ต้องการ ZebraPress</p>
-        <p>รันคำสั่งนี้บนเครื่องก่อนใช้งาน:</p>
-        <code className="block bg-slate-800 text-emerald-400 rounded px-2 py-1 text-xs">
-          cd ZEBRA-LABEL-PRINTER3 &amp;&amp; node server.js
-        </code>
-      </div>
     </div>
   );
 };
 
 // ─── Template Editor Modal ────────────────────────────────────────────────────
+const DEFAULT_SAMPLE = {
+  name:     'ตัวอย่างสินค้า',
+  sku:      'SKU-001',
+  barcode:  '1234567890',
+  location: 'ห้อง A101',
+  date:     new Date().toLocaleDateString('th-TH'),
+  time:     new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+};
+
 const TemplateEditorModal = ({ template, onSave, onClose }) => {
-  const [draft, setDraft]           = useState(template);
-  const [previewImg, setPreviewImg] = useState(null);
-  const [previewing, setPreviewing] = useState(false);
-  const [previewErr, setPreviewErr] = useState('');
+  const [draft, setDraft]               = useState(template);
+  const [previewImg, setPreviewImg]     = useState(null);
+  const [previewing, setPreviewing]     = useState(false);
+  const [previewErr, setPreviewErr]     = useState('');
+  const [sample, setSample]             = useState(DEFAULT_SAMPLE);
   const taRef = useRef(null);
+
+  const updateSample = (field, value) =>
+    setSample(prev => ({ ...prev, [field]: value }));
 
   const insertAtCursor = (text) => {
     const ta = taRef.current;
@@ -173,7 +173,6 @@ const TemplateEditorModal = ({ template, onSave, onClose }) => {
     setPreviewing(true);
     setPreviewErr('');
     setPreviewImg(null);
-    const sample = { name: 'ตัวอย่างสินค้า', sku: 'SKU-001', barcode: '1234567890' };
     try {
       const blob = await previewZPL([sample], 'ZD230', draft);
       setPreviewImg(URL.createObjectURL(blob));
@@ -272,14 +271,21 @@ const TemplateEditorModal = ({ template, onSave, onClose }) => {
                   <p className="text-xs text-center">กด ▶ Preview<br />เพื่อดูตัวอย่าง</p>
                 </div>
               )}
-              <div className="bg-white border border-slate-100 rounded-lg p-3 text-xs text-slate-500 space-y-1">
-                <p className="font-semibold text-slate-600 mb-1">ตัวอย่างข้อมูลที่ใช้</p>
+              <div className="bg-white border border-slate-100 rounded-lg p-3 text-xs text-slate-500 space-y-2">
+                <div className="flex items-center justify-between mb-1">
+                  <p className="font-semibold text-slate-600">ข้อมูลตัวอย่าง (แก้ไขได้)</p>
+                  <button onClick={() => setSample(DEFAULT_SAMPLE)}
+                    className="text-xs text-slate-400 hover:text-slate-600 underline">reset</button>
+                </div>
                 {FIELDS.map(f => (
-                  <div key={f.name} className="flex gap-2">
-                    <span className="font-mono text-slate-400 w-16 flex-shrink-0">{f.name}:</span>
-                    <span className="text-slate-600 truncate">
-                      {f.name === 'name' ? 'ตัวอย่างสินค้า' : f.name === 'sku' ? 'SKU-001' : '1234567890'}
-                    </span>
+                  <div key={f.name} className="flex flex-col gap-0.5">
+                    <span className="font-mono text-slate-400">{f.name}</span>
+                    <input
+                      type="text"
+                      value={sample[f.name] ?? ''}
+                      onChange={e => updateSample(f.name, e.target.value)}
+                      className="w-full border border-slate-200 rounded px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-blue-400"
+                    />
                   </div>
                 ))}
               </div>
@@ -413,7 +419,7 @@ const PrintLabels = () => {
   const [zplModalContent, setZplModalContent] = useState('');
   const [printing, setPrinting]               = useState(false);
 
-  // ─── Load printers จาก ZebraPress (localhost:3000) ───────────────────
+  // ─── Load printers ────────────────────────────────────────────────────
   const loadPrinters = useCallback(async () => {
     setLoadingPrinters(true);
     setPrinterError('');
@@ -459,11 +465,15 @@ const PrintLabels = () => {
     const selected = assets.filter(a => selectedIds.has(a.Id));
     const repeated = [];
     for (let c = 0; c < copies; c++) repeated.push(...selected);
+    const now = new Date();
     return repeated.map(a => ({
-      name:    (a.Name ?? '').substring(0, 20),
-      sku:     a.InvNo   ?? '',
-      barcode: a.InvNo   ?? '',
-      epc:     a.RfidTag ?? '',
+      name:     (a.Name ?? '').substring(0, 20),
+      sku:      a.InvNo    ?? '',
+      barcode:  a.InvNo    ?? '',
+      epc:      a.RfidTag  ?? '',
+      location: a.Location ?? '',
+      date:     now.toLocaleDateString('th-TH'),
+      time:     now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
     }));
   }, [assets, selectedIds, copies]);
 

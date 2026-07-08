@@ -41,6 +41,13 @@ export const assetAPI = {
   delete: (id) => api.delete(`/assets/${id}`),
 };
 
+// ── Categories ────────────────────────────────────────
+export const categoryAPI = {
+  getAll:  ()       => api.get('/assets/categories'),
+  rename:  (data)   => api.put('/assets/categories/rename', data),
+  delete:  (name)   => api.delete(`/assets/categories/${encodeURIComponent(name)}`),
+};
+
 // ── Users ─────────────────────────────────────────────
 export const userAPI = {
   getAll: () => api.get('/users'),
@@ -51,7 +58,7 @@ export const userAPI = {
 
 // ── Locations ─────────────────────────────────────────
 export const locationAPI = {
-  getAll: () => api.get('/locations'),
+  getLocations: () => api.get('/locations'),
   move: (data) => api.post('/locations/move', data),
 };
 

@@ -3,13 +3,16 @@ const router = express.Router();
 const { verifyToken, hasPermission } = require('../middlewares/authMiddleware');
 
 // ← เหลือบรรทัดนี้บรรทัดเดียว ลบอันเก่าออก
-const { 
-  getAllAssets, createAsset, deleteAsset, getAssetById, 
-  getAssetStats, updateAssetStatus, updateAsset, getCategories 
+const {
+  getAllAssets, createAsset, deleteAsset, getAssetById,
+  getAssetStats, updateAssetStatus, updateAsset, getCategories,
+  renameCategory, deleteCategory,
 } = require('../controllers/assetController');
 
 router.get('/stats', verifyToken, getAssetStats);
-router.get('/categories', verifyToken, getCategories);   // ← ต้องอยู่ก่อน /:id
+router.get('/categories', verifyToken, getCategories);          // must be before /:id
+router.put('/categories/rename', verifyToken, renameCategory);  // must be before /:id
+router.delete('/categories/:name', verifyToken, deleteCategory);
 router.get('/', verifyToken, hasPermission('view_assets'), getAllAssets);
 router.post('/', verifyToken, hasPermission('manage_assets'), createAsset);
 router.get('/:id', verifyToken, getAssetById);

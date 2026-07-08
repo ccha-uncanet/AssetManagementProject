@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { QRCodeCanvas } from 'qrcode.react';
 import * as XLSX from 'xlsx';
 import api, { assetAPI } from '../services/api';
+import { getPrinters, printZPL } from '../services/zebrapress';
 import { exportPDF } from '../utils/exportPDF';
 import { useAuth } from '../context/AuthContext';
 import usePermission from '../hooks/usePermission';
@@ -61,19 +62,6 @@ const Modal = ({ title, onClose, children, wide }) => (
   </div>
 );
 
-// ── ZPL Print helper ──────────────────────────────────────────────────────────
-const printZPL = async (assets, printerIp, printerPort, showToast) => {
-  try {
-    const res = await api.post('/print/network', {
-      assets,
-      ip: printerIp,
-      port: parseInt(printerPort),
-    });
-    showToast(res.data.message || 'ส่งงานพิมพ์สำเร็จ');
-  } catch (err) {
-    showToast('พิมพ์ไม่สำเร็จ: ' + (err.response?.data?.error || err.message), 'error');
-  }
-};
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 const InventoryCounting = () => {
@@ -95,11 +83,14 @@ const InventoryCounting = () => {
   const [statusFilter, setStatusFilter] = useState('all');
 
   // Print modal
-  const [showPrintModal, setShowPrintModal] = useState(false);
-  const [printTarget, setPrintTarget]       = useState([]); // assets to print
-  const [printerIp, setPrinterIp]           = useState('192.168.1.200');
-  const [printerPort, setPrinterPort]       = useState(9100);
-  const [printing, setPrinting]             = useState(false);
+  const [showPrintModal, setShowPrintModal]       = useState(false);
+  const [printTarget, setPrintTarget]             = useState([]);
+  const [printers, setPrinters]                   = useState([]);
+  const [selectedPrinter, setSelectedPrinter]     = useState('');
+  const [loadingPrinters, setLoadingPrinters]     = useState(false);
+  const [printing, setPrinting]                   = useState(false);
+  const [selectedCountedIds,   setSelectedCountedIds]   = useState(new Set());
+  const [selectedUncountedIds, setSelectedUncountedIds] = useState(new Set());
 
   // Modals
   const [showNewSession, setShowNewSession]   = useState(false);
@@ -369,18 +360,70 @@ const InventoryCounting = () => {
     XLSX.writeFile(wb, `uncounted_${activeSession.Name}_${new Date().toLocaleDateString('th-TH')}.xlsx`);
   };
 
-  // ── Print ZPL uncounted ───────────────────────────────────────────────────
+  // ── Print ZPL ─────────────────────────────────────────────────────────────
+  const openPrintModal = async (assets) => {
+    setPrintTarget(assets);
+    setShowPrintModal(true);
+    setLoadingPrinters(true);
+    try {
+      const data = await getPrinters();
+      const list = data.printers ?? [];
+      setPrinters(list);
+      if (list.length === 1) setSelectedPrinter(list[0]);
+    } catch { setPrinters([]); }
+    finally { setLoadingPrinters(false); }
+  };
+
+  const toggleCountedId = (id) => setSelectedCountedIds(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+  const toggleAllCounted = () => setSelectedCountedIds(prev =>
+    prev.size === filteredItems.length ? new Set() : new Set(filteredItems.map(i => i.Id))
+  );
+  const toggleUncountedId = (id) => setSelectedUncountedIds(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
+  });
+  const toggleAllUncounted = () => setSelectedUncountedIds(prev =>
+    prev.size === filteredUncounted.length ? new Set() : new Set(filteredUncounted.map(a => a.Id))
+  );
+  const clearPrintSelections = () => { setSelectedCountedIds(new Set()); setSelectedUncountedIds(new Set()); };
+
   const handlePrintUncounted = () => {
     if (!filteredUncounted.length) { showToast('ไม่มีรายการที่ยังไม่ได้นับ', 'error'); return; }
-    setPrintTarget(filteredUncounted);
-    setShowPrintModal(true);
+    const targets = selectedUncountedIds.size > 0
+      ? filteredUncounted.filter(a => selectedUncountedIds.has(a.Id))
+      : filteredUncounted;
+    openPrintModal(targets);
+  };
+
+  const handlePrintCounted = () => {
+    if (!filteredItems.length) { showToast('ไม่มีรายการที่นับแล้ว', 'error'); return; }
+    const targets = selectedCountedIds.size > 0
+      ? filteredItems.filter(i => selectedCountedIds.has(i.Id))
+      : filteredItems;
+    openPrintModal(targets);
   };
 
   const handlePrintConfirm = async () => {
+    if (!selectedPrinter) { showToast('กรุณาเลือกเครื่องพิมพ์', 'error'); return; }
     setPrinting(true);
+    const now = new Date();
+    const items = printTarget.map(a => ({
+      name:     (a.Name ?? a.AssetName ?? '').substring(0, 20),
+      sku:      a.InvNo    ?? '',
+      barcode:  a.InvNo    ?? '',
+      epc:      a.RfidTag  ?? '',
+      location: a.Location ?? '',
+      date:     now.toLocaleDateString('th-TH'),
+      time:     now.toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }),
+    }));
     try {
-      await printZPL(printTarget, printerIp, printerPort, showToast);
+      await printZPL(selectedPrinter, items, 'ZD230');
+      showToast(`ปริ้นสำเร็จ ${items.length} ฉลาก`);
       setShowPrintModal(false);
+      clearPrintSelections();
+    } catch (e) {
+      showToast('พิมพ์ไม่สำเร็จ: ' + (e.response?.data?.error || e.message), 'error');
     } finally { setPrinting(false); }
   };
 
@@ -573,7 +616,7 @@ const InventoryCounting = () => {
                   ))}
                 </div>
 
-                {/* Uncounted actions */}
+                {/* Tab actions */}
                 {activeTab === 'uncounted' && uncountedAssets.length > 0 && (
                   <div className="flex gap-2">
                     <button onClick={handleExportUncounted}
@@ -582,9 +625,15 @@ const InventoryCounting = () => {
                     </button>
                     <button onClick={handlePrintUncounted}
                       className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
-                      <Printer size={12}/> Print ZPL
+                      <Printer size={12}/> {selectedUncountedIds.size > 0 ? `พิมพ์ฉลาก (${selectedUncountedIds.size})` : 'พิมพ์ฉลาก'}
                     </button>
                   </div>
+                )}
+                {activeTab === 'counted' && filteredItems.length > 0 && (
+                  <button onClick={handlePrintCounted}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 rounded-lg hover:bg-purple-100 transition-colors">
+                    <Printer size={12}/> {selectedCountedIds.size > 0 ? `พิมพ์ฉลาก (${selectedCountedIds.size})` : 'พิมพ์ฉลาก'}
+                  </button>
                 )}
               </div>
 
@@ -595,6 +644,12 @@ const InventoryCounting = () => {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50">
+                          <th className="px-4 py-3 w-8">
+                            <input type="checkbox"
+                              checked={filteredItems.length > 0 && selectedCountedIds.size === filteredItems.length}
+                              onChange={toggleAllCounted}
+                              className="rounded border-gray-300 accent-purple-600"/>
+                          </th>
                           {['#','QR','Inv_No','ชื่อทรัพย์สิน','Location','ผู้นับ','เวลาที่นับ','สถานะ', isActive?'ลบ':''].map((h,i)=>(
                             <th key={i} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-left">{h}</th>
                           ))}
@@ -605,6 +660,12 @@ const InventoryCounting = () => {
                           const isNew = i === 0 && isActive; // highlight รายการล่าสุด
                           return (
                             <tr key={item.Id} className={`transition-colors ${isNew ? 'bg-green-50' : 'hover:bg-gray-50'}`}>
+                              <td className="px-4 py-3">
+                                <input type="checkbox"
+                                  checked={selectedCountedIds.has(item.Id)}
+                                  onChange={() => toggleCountedId(item.Id)}
+                                  className="rounded border-gray-300 accent-purple-600"/>
+                              </td>
                               <td className="px-4 py-3 text-gray-400 tabular-nums">{i+1}</td>
                               <td className="px-4 py-3">
                                 {item.AssetId ? <QRCodeCanvas value={item.AssetId} size={36} level="H"/> : <span className="text-gray-300">-</span>}
@@ -665,6 +726,12 @@ const InventoryCounting = () => {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-gray-100 bg-gray-50">
+                          <th className="px-4 py-3 w-8">
+                            <input type="checkbox"
+                              checked={filteredUncounted.length > 0 && selectedUncountedIds.size === filteredUncounted.length}
+                              onChange={toggleAllUncounted}
+                              className="rounded border-gray-300 accent-purple-600"/>
+                          </th>
                           {['#','InvNo','ชื่อทรัพย์สิน','S/N','สถานที่','หมวดหมู่','สถานะ'].map((h,i)=>(
                             <th key={i} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-left">{h}</th>
                           ))}
@@ -673,6 +740,12 @@ const InventoryCounting = () => {
                       <tbody className="divide-y divide-gray-50">
                         {filteredUncounted.map((a, i) => (
                           <tr key={a.Id} className="hover:bg-orange-50/30 transition-colors">
+                            <td className="px-4 py-3">
+                              <input type="checkbox"
+                                checked={selectedUncountedIds.has(a.Id)}
+                                onChange={() => toggleUncountedId(a.Id)}
+                                className="rounded border-gray-300 accent-purple-600"/>
+                            </td>
                             <td className="px-4 py-3 text-gray-400 tabular-nums">{i+1}</td>
                             <td className="px-4 py-3">
                               <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{a.InvNo||'-'}</span>
@@ -816,24 +889,29 @@ const InventoryCounting = () => {
 
       {/* ── Modal: Print ZPL ── */}
       {showPrintModal && (
-        <Modal title={`Print ZPL — ${printTarget.length} รายการที่ยังไม่นับ`} onClose={() => setShowPrintModal(false)}>
-          <p className="text-sm text-gray-500 mb-4">ส่งงานพิมพ์ฉลากสำหรับทรัพย์สินที่ยังไม่ได้นับ</p>
-          <div className="space-y-3 mb-5">
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">IP Address เครื่องพิมพ์</label>
-              <input type="text" value={printerIp} onChange={e => setPrinterIp(e.target.value)} className={inputCls}/>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1.5">Port</label>
-              <input type="number" value={printerPort} onChange={e => setPrinterPort(e.target.value)} className={inputCls}/>
-            </div>
+        <Modal title={`พิมพ์ฉลาก — ${printTarget.length} รายการ`} onClose={() => { setShowPrintModal(false); clearPrintSelections(); }}>
+          <p className="text-sm text-gray-500 mb-4">เลือกเครื่องพิมพ์ Zebra แล้วกดพิมพ์</p>
+          <div className="mb-5">
+            <label className="block text-xs font-medium text-gray-600 mb-1.5">เครื่องพิมพ์</label>
+            {loadingPrinters ? (
+              <div className="flex items-center gap-2 text-sm text-gray-400 py-2">
+                <Loader2 size={14} className="animate-spin"/> กำลังโหลด...
+              </div>
+            ) : printers.length === 0 ? (
+              <p className="text-xs text-red-500">ไม่พบเครื่องพิมพ์ — ตรวจสอบการเชื่อมต่อ</p>
+            ) : (
+              <select value={selectedPrinter} onChange={e => setSelectedPrinter(e.target.value)} className={inputCls}>
+                <option value="">— เลือกเครื่องพิมพ์ —</option>
+                {printers.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            )}
           </div>
           <div className="flex gap-3">
-            <button onClick={() => setShowPrintModal(false)} disabled={printing}
+            <button onClick={() => { setShowPrintModal(false); clearPrintSelections(); }} disabled={printing}
               className="flex-1 py-2.5 text-sm text-gray-600 bg-gray-100 rounded-xl hover:bg-gray-200 disabled:opacity-50 transition-colors">ยกเลิก</button>
-            <button onClick={handlePrintConfirm} disabled={printing}
+            <button onClick={handlePrintConfirm} disabled={printing || !selectedPrinter}
               className="flex-[2] flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-purple-600 rounded-xl hover:bg-purple-700 disabled:opacity-50 transition-colors">
-              {printing ? <><Loader2 size={14} className="animate-spin"/> กำลังส่ง...</> : <><Printer size={14}/> พิมพ์ {printTarget.length} ฉลาก</>}
+              {printing ? <><Loader2 size={14} className="animate-spin"/> กำลังพิมพ์...</> : <><Printer size={14}/> พิมพ์ {printTarget.length} ฉลาก</>}
             </button>
           </div>
         </Modal>

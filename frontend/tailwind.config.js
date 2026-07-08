@@ -43,6 +43,15 @@ module.exports = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
+      keyframes: {
+        scanline: {
+          '0%, 100%': { top: '0' },
+          '50%': { top: 'calc(100% - 2px)' },
+        },
+      },
+      animation: {
+        scanline: 'scanline 2s ease-in-out infinite',
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

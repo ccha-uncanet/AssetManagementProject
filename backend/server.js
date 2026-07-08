@@ -30,9 +30,26 @@ app.use('/api/borrow-requests', require('./routes/borrow'));
 
 app.get('/', (req, res) => res.send('Asset Management API is running...'));
 
+const { sql } = require('./config/db');
+
+const ensureAssetRfidColumns = async () => {
+    try {
+        await sql.query(`
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Assets') AND name = 'RfidTag')
+                ALTER TABLE Assets ADD RfidTag NVARCHAR(100) NULL;
+            IF NOT EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('Assets') AND name = 'HasRfid')
+                ALTER TABLE Assets ADD HasRfid BIT NOT NULL DEFAULT 0;
+        `);
+        console.log('✅ Assets.RfidTag / HasRfid columns ready');
+    } catch (err) {
+        console.error('ensureAssetRfidColumns error:', err.message);
+    }
+};
+
 const startServer = async () => {
     await connectDB();
-    await ensureUserLogsTable(); // สร้างตาราง UserLogs หลัง DB connect
+    await ensureUserLogsTable();
+    await ensureAssetRfidColumns();
     app.listen(PORT, () => console.log('🚀 Server is running on port ' + PORT));
 };
 

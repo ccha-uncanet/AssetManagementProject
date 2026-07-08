@@ -5,6 +5,13 @@ module.exports = {
         test: /\.txt$/,
         type: 'asset/source',
       });
+
+      // Suppress missing source map warnings from node_modules (e.g. html5-qrcode)
+      webpackConfig.ignoreWarnings = [
+        ...(webpackConfig.ignoreWarnings || []),
+        /Failed to parse source map/,
+      ];
+
       return webpackConfig;
     },
   },

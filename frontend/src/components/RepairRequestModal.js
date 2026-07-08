@@ -1,6 +1,6 @@
-import React, { useState, useRef } from 'react';
-import { X, Send, AlertTriangle, Image as ImageIcon, Trash2 } from 'lucide-react';
-import { repairAPI } from '../services/api';
+import React, { useState, useRef, useEffect } from 'react';
+import { X, Send, AlertTriangle, Image as ImageIcon, Trash2, Search, Package } from 'lucide-react';
+import { repairAPI, assetAPI } from '../services/api';
 
 const inputCls =
   'w-full px-3 py-2.5 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent bg-white placeholder-gray-400';
@@ -31,7 +31,29 @@ const URGENCY = [
 //   asset     — object จาก ScanAsset (มี Id, Name, InvNo, SerialNumber)
 //   onClose   — callback ปิด modal
 //   onSuccess — callback หลังส่งสำเร็จ (optional)
-const RepairRequestModal = ({ asset, onClose, onSuccess }) => {
+const RepairRequestModal = ({ asset: assetProp, onClose, onSuccess }) => {
+  // When opened without a pre-selected asset, show an inline asset picker first
+  const [pickedAsset, setPickedAsset] = useState(assetProp || null);
+  const [allAssets, setAllAssets]     = useState([]);
+  const [assetSearch, setAssetSearch] = useState('');
+  const [loadingAssets, setLoadingAssets] = useState(!assetProp);
+
+  const asset = pickedAsset; // alias for the rest of the form
+
+  useEffect(() => {
+    if (assetProp) return; // already have one
+    assetAPI.getAll()
+      .then(r => setAllAssets(r.data || []))
+      .catch(() => {})
+      .finally(() => setLoadingAssets(false));
+  }, [assetProp]);
+
+  const filteredAssets = allAssets.filter(a => {
+    const q = assetSearch.toLowerCase();
+    return !q || [a.Name, a.InvNo, a.SerialNumber, a.Location]
+      .some(v => v?.toLowerCase().includes(q));
+  });
+
   const [urgency, setUrgency]       = useState('normal');
   const [symptom, setSymptom]       = useState('');
   const [note, setNote]             = useState('');
@@ -122,6 +144,57 @@ const RepairRequestModal = ({ asset, onClose, onSuccess }) => {
 
         {/* body */}
         <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
+          {/* Asset picker — shown when no asset pre-selected */}
+          {!asset && (
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                เลือกทรัพย์สิน <span className="text-red-500">*</span>
+              </label>
+              <div className="relative mb-2">
+                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                <input
+                  autoFocus
+                  value={assetSearch}
+                  onChange={e => setAssetSearch(e.target.value)}
+                  placeholder="ค้นหาชื่อ, รหัส, สถานที่..."
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white"
+                />
+              </div>
+              <div className="max-h-52 overflow-y-auto border border-gray-100 rounded-xl divide-y divide-gray-50">
+                {loadingAssets ? (
+                  <p className="text-sm text-gray-400 text-center py-6">กำลังโหลด...</p>
+                ) : filteredAssets.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-6">ไม่พบทรัพย์สิน</p>
+                ) : filteredAssets.map(a => (
+                  <button key={a.Id} type="button"
+                    onClick={() => setPickedAsset(a)}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 hover:bg-orange-50 text-left transition-colors">
+                    <Package size={14} className="text-gray-400 flex-shrink-0"/>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-800 truncate">{a.Name}</p>
+                      <p className="text-xs text-gray-400">{a.InvNo || '—'} · {a.Location || '—'}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Selected asset display (when picked but not pre-passed) */}
+          {asset && !assetProp && (
+            <div className="flex items-center gap-3 bg-orange-50 rounded-xl px-4 py-3">
+              <Package size={16} className="text-orange-500 flex-shrink-0"/>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-gray-900 truncate">{asset.Name}</p>
+                <p className="text-xs text-gray-500">{asset.InvNo || '—'}</p>
+              </div>
+              <button type="button" onClick={() => setPickedAsset(null)}
+                className="p-1 rounded-lg hover:bg-orange-100 text-orange-400">
+                <X size={14}/>
+              </button>
+            </div>
+          )}
 
           {/* error */}
           {error && (
@@ -252,7 +325,7 @@ const RepairRequestModal = ({ asset, onClose, onSuccess }) => {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={submitting || !symptom.trim()}
+            disabled={submitting || !symptom.trim() || !asset}
             className="flex-[2] flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-orange-500 rounded-xl hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {submitting ? (

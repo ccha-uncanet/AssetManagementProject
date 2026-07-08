@@ -20,11 +20,16 @@ import InventoryCounting from './pages/InventoryCounting';
 import LocationMovement from './pages/LocationMovement';
 import ImportAssets from './pages/ImportAssets';
 import PrintLabels from './pages/PrintLabels';
+import CategoryManagement from './pages/CategoryManagement';
+import BorrowManagement from './pages/BorrowManagement';
+import RepairManagement from './pages/RepairManagement';
+import Reports from './pages/Reports';
 import UserManagement from './pages/UserManagement';
 
 // Superadmin Pages
 import RolePermission from './pages/superadmin/RolePermission';
 import SystemLogs from './pages/superadmin/SystemLogs';
+import SystemSettings from './pages/superadmin/SystemSettings';
 
 // Unauthorized
 import Unauthorized from './pages/Unauthorized';
@@ -57,6 +62,32 @@ function App() {
             element={
               <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_ASSETS]} redirectTo="/unauthorized">
                 <AssetManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="categories"
+            element={
+              <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_ASSETS]} redirectTo="/unauthorized">
+                <CategoryManagement />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="borrows"
+            element={
+              <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_ASSETS]} redirectTo="/unauthorized">
+                <BorrowManagement />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="repairs"
+            element={
+              <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_ASSETS]} redirectTo="/unauthorized">
+                <RepairManagement />
               </ProtectedRoute>
             }
           />
@@ -107,6 +138,15 @@ function App() {
           />
 
           <Route
+            path="reports"
+            element={
+              <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_REPORTS]} redirectTo="/unauthorized">
+                <Reports />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="users"
             element={
               <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_USERS]} redirectTo="/unauthorized">
@@ -129,6 +169,15 @@ function App() {
             element={
               <ProtectedRoute requiredPermissions={[PERMISSIONS.VIEW_LOGS]} redirectTo="/unauthorized">
                 <SystemLogs />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="settings"
+            element={
+              <ProtectedRoute allowedRoles={['superadmin']} redirectTo="/unauthorized">
+                <SystemSettings />
               </ProtectedRoute>
             }
           />

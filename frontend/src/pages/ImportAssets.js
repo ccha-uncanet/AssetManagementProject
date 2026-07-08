@@ -143,14 +143,13 @@ const ImportAssets = () => {
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">นำเข้าทรัพย์สิน</h1>
-        <p className="text-sm text-gray-500 mt-0.5">Import ข้อมูลจาก Excel หรือสแกน RFID</p>
+        <p className="text-sm text-gray-500 mt-0.5">Import ข้อมูลจาก Excel</p>
       </div>
 
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
           { key: 'excel', label: 'Import Excel', icon: FileSpreadsheet },
-          { key: 'rfid',  label: 'สแกน RFID',   icon: Radio },
         ].map(tab => (
           <button key={tab.key}
             onClick={() => { setActiveTab(tab.key); if (tab.key==='rfid') setTimeout(() => rfidRef.current?.focus(), 100); }}

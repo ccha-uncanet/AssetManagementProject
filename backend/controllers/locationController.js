@@ -54,4 +54,21 @@ const getHistory = async (req, res) => {
     }
 };
 
-module.exports = { moveAsset, getHistory };
+// GET /api/locations — distinct locations with asset count
+const getLocations = async (req, res) => {
+    try {
+        const result = await sql.query(`
+            SELECT Location, COUNT(*) AS AssetCount
+            FROM Assets
+            WHERE Location IS NOT NULL AND Location != ''
+            GROUP BY Location
+            ORDER BY Location ASC
+        `);
+        res.json(result.recordset);
+    } catch (err) {
+        console.error('getLocations Error:', err.message);
+        res.status(500).json({ error: 'เกิดข้อผิดพลาด: ' + err.message });
+    }
+};
+
+module.exports = { moveAsset, getHistory, getLocations };

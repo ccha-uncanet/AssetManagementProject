@@ -127,19 +127,50 @@ const updateAssetStatus = async (req, res) => {
 };
 // ── เพิ่มฟังก์ชันเหล่านี้ใน assetController.js ──────────────────────────────
 
-// GET /api/assets/categories — ดึง category ที่มีอยู่จริงใน DB
+// GET /api/assets/categories — ดึง category พร้อมจำนวนทรัพย์สิน
 const getCategories = async (req, res) => {
     try {
         const result = await sql.query(`
-            SELECT DISTINCT Category 
-            FROM Assets 
+            SELECT Category, COUNT(*) AS AssetCount
+            FROM Assets
             WHERE Category IS NOT NULL AND Category != ''
+            GROUP BY Category
             ORDER BY Category ASC
         `);
-        const categories = result.recordset.map(r => r.Category);
-        res.json(categories);
+        res.json(result.recordset);
     } catch (err) {
         console.error('Error fetching categories:', err);
+        res.status(500).json({ message: 'เกิดข้อผิดพลาด' });
+    }
+};
+
+// PUT /api/assets/categories/rename — เปลี่ยนชื่อ category ทั้งหมด
+const renameCategory = async (req, res) => {
+    const { oldName, newName } = req.body;
+    if (!oldName?.trim() || !newName?.trim())
+        return res.status(400).json({ message: 'กรุณาระบุชื่อเดิมและชื่อใหม่' });
+    try {
+        const request = new sql.Request();
+        request.input('oldName', sql.NVarChar, oldName.trim());
+        request.input('newName', sql.NVarChar, newName.trim());
+        const result = await request.query('UPDATE Assets SET Category = @newName WHERE Category = @oldName');
+        res.json({ affected: result.rowsAffected[0] });
+    } catch (err) {
+        console.error('Error renaming category:', err);
+        res.status(500).json({ message: 'เกิดข้อผิดพลาด' });
+    }
+};
+
+// DELETE /api/assets/categories/:name — ล้าง category ออกจากทรัพย์สิน
+const deleteCategory = async (req, res) => {
+    const name = decodeURIComponent(req.params.name);
+    try {
+        const request = new sql.Request();
+        request.input('name', sql.NVarChar, name);
+        const result = await request.query('UPDATE Assets SET Category = NULL WHERE Category = @name');
+        res.json({ affected: result.rowsAffected[0] });
+    } catch (err) {
+        console.error('Error deleting category:', err);
         res.status(500).json({ message: 'เกิดข้อผิดพลาด' });
     }
 };
@@ -148,7 +179,7 @@ const getCategories = async (req, res) => {
 const updateAsset = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, description, serialNumber, purchaseDate, purchasePrice, status, invNo, location, category } = req.body;
+        const { name, description, serialNumber, purchaseDate, purchasePrice, status, invNo, location, category, rfidTag } = req.body;
 
         const request = new sql.Request();
         request.input('Id', sql.UniqueIdentifier, id);
@@ -161,6 +192,8 @@ const updateAsset = async (req, res) => {
         request.input('InvNo', sql.NVarChar, invNo || '');
         request.input('Location', sql.NVarChar, location || '');
         request.input('Category', sql.NVarChar, category || '');
+        request.input('RfidTag', sql.NVarChar, rfidTag || '');
+        request.input('HasRfid', sql.Bit, rfidTag ? 1 : 0);
 
         await request.query(`
             UPDATE Assets SET
@@ -172,7 +205,9 @@ const updateAsset = async (req, res) => {
                 Status = @Status,
                 InvNo = @InvNo,
                 Location = @Location,
-                Category = @Category
+                Category = @Category,
+                RfidTag = @RfidTag,
+                HasRfid = @HasRfid
             WHERE Id = @Id
         `);
 
@@ -187,13 +222,15 @@ const updateAsset = async (req, res) => {
     }
 };
 
-module.exports = { 
-  getAllAssets, 
-  createAsset, 
-  deleteAsset, 
-  getAssetById, 
-  getAssetStats, 
+module.exports = {
+  getAllAssets,
+  createAsset,
+  deleteAsset,
+  getAssetById,
+  getAssetStats,
   updateAssetStatus,
-  updateAsset,      // เพิ่ม
-  getCategories     // เพิ่ม
+  updateAsset,
+  getCategories,
+  renameCategory,
+  deleteCategory,
 };

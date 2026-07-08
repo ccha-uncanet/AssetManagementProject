@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import api, { assetAPI } from '../services/api';
+import api, { assetAPI, locationAPI } from '../services/api';
 import usePermission from '../hooks/usePermission';
 import { PERMISSIONS } from '../constants/permissions';
 import {
   Search, MapPin, ArrowRight, Truck, X, Loader2,
   CheckCircle2, AlertTriangle, History, Package,
-  Filter, ChevronDown, Tag, Hash, RefreshCw
+  Filter, ChevronDown, Tag, Hash, RefreshCw, ChevronRight,
 } from 'lucide-react';
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 const STATUS = {
-  1: { label: 'ว่าง',   color: 'bg-green-100 text-green-700'  },
-  2: { label: 'ถูกยืม', color: 'bg-red-100 text-red-700'     },
+  1: { label: 'ว่าง',   color: 'bg-green-100 text-green-700'   },
+  2: { label: 'ถูกยืม', color: 'bg-red-100 text-red-700'      },
   3: { label: 'ซ่อม',   color: 'bg-orange-100 text-orange-700' },
 };
 
@@ -45,7 +45,6 @@ const MoveModal = ({ asset, onConfirm, onClose, loading }) => {
           <p className="text-xs text-gray-400 mt-0.5 font-mono">{asset.InvNo || asset.Id}</p>
         </div>
 
-        {/* From → To */}
         <div className="flex items-center gap-3 mb-5">
           <div className="flex-1 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2.5 text-center">
             <p className="text-xs text-amber-600 mb-1">สถานที่เดิม</p>
@@ -111,7 +110,6 @@ const BulkMoveModal = ({ selectedAssets, onConfirm, onClose, loading }) => {
           เลือกทรัพย์สิน <strong>{selectedAssets.length} รายการ</strong> จะถูกย้ายไปสถานที่เดียวกัน
         </div>
 
-        {/* รายการที่เลือก */}
         <div className="max-h-36 overflow-y-auto border border-gray-100 rounded-xl mb-4 divide-y divide-gray-50">
           {selectedAssets.map(a => (
             <div key={a.Id} className="flex items-center gap-3 px-3 py-2">
@@ -161,18 +159,27 @@ const BulkMoveModal = ({ selectedAssets, onConfirm, onClose, loading }) => {
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 const LocationMovement = () => {
-  const [assets, setAssets]         = useState([]);
-  const [history, setHistory]       = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [moving, setMoving]         = useState(false);
+  const [assets, setAssets]       = useState([]);
+  const [history, setHistory]     = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [moving, setMoving]       = useState(false);
   const [selectedIds, setSelectedIds] = useState([]);
-  const [showModal, setShowModal]   = useState(false);
-  const [showBulk, setShowBulk]     = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [showBulk, setShowBulk]   = useState(false);
   const [selectedAsset, setSelectedAsset] = useState(null);
-  const [toast, setToast]           = useState(null);
-  const [activeTab, setActiveTab]   = useState('assets'); // 'assets' | 'history'
+  const [toast, setToast]         = useState(null);
+  const [activeTab, setActiveTab] = useState('locations'); // 'locations' | 'assets' | 'history'
 
-  // ── Search filters ────────────────────────────────────────────────────────
+  // ── Locations tab state ───────────────────────────────────────────────────
+  const [locations, setLocations]           = useState([]);
+  const [selectedLoc, setSelectedLoc]       = useState(null);
+  const [locAssets, setLocAssets]           = useState([]);
+  const [loadingLocs, setLoadingLocs]       = useState(false);
+  const [loadingLocAssets, setLoadingLocAssets] = useState(false);
+  const [locSearch, setLocSearch]           = useState('');
+  const [locAssetSearch, setLocAssetSearch] = useState('');
+
+  // ── Assets tab filters ────────────────────────────────────────────────────
   const [searchName, setSearchName]         = useState('');
   const [searchInvNo, setSearchInvNo]       = useState('');
   const [searchLocation, setSearchLocation] = useState('');
@@ -193,6 +200,15 @@ const LocationMovement = () => {
   };
 
   // ── Fetch ─────────────────────────────────────────────────────────────────
+  const fetchLocations = useCallback(async () => {
+    setLoadingLocs(true);
+    try {
+      const res = await locationAPI.getLocations();
+      setLocations(res.data.filter(l => l.Location));
+    } catch { showToast('ดึงข้อมูลสถานที่ไม่สำเร็จ', 'error'); }
+    finally { setLoadingLocs(false); }
+  }, []);
+
   const fetchAssets = useCallback(async () => {
     try {
       const res = await assetAPI.getAll();
@@ -208,10 +224,36 @@ const LocationMovement = () => {
   }, []);
 
   useEffect(() => {
-    Promise.all([fetchAssets(), fetchHistory()]).finally(() => setLoading(false));
+    Promise.all([fetchLocations(), fetchAssets(), fetchHistory()]).finally(() => setLoading(false));
   }, []);
 
-  // ── Filter assets ─────────────────────────────────────────────────────────
+  // ── Locations tab: open detail ────────────────────────────────────────────
+  const openLocation = async (loc) => {
+    setSelectedLoc(loc);
+    setLocAssetSearch('');
+    setLoadingLocAssets(true);
+    try {
+      const res = await assetAPI.getAll();
+      setLocAssets(res.data.filter(a => a.Location === loc.Location));
+    } catch { showToast('ดึงรายการทรัพย์สินไม่สำเร็จ', 'error'); }
+    finally { setLoadingLocAssets(false); }
+  };
+
+  const closeDetail = () => { setSelectedLoc(null); setLocAssets([]); setLocAssetSearch(''); };
+
+  const filteredLocations = locations.filter(l =>
+    l.Location?.toLowerCase().includes(locSearch.toLowerCase())
+  );
+
+  const filteredLocAssets = locAssets.filter(a =>
+    [a.Name, a.InvNo, a.SerialNumber, a.Category].some(v =>
+      v?.toLowerCase().includes(locAssetSearch.toLowerCase())
+    )
+  );
+
+  const totalLocAssets = locations.reduce((s, l) => s + l.AssetCount, 0);
+
+  // ── Assets tab filter ─────────────────────────────────────────────────────
   const filteredAssets = assets.filter(a => {
     const matchName     = !searchName     || a.Name?.toLowerCase().includes(searchName.toLowerCase());
     const matchInvNo    = !searchInvNo    || a.InvNo?.toLowerCase().includes(searchInvNo.toLowerCase());
@@ -223,13 +265,12 @@ const LocationMovement = () => {
   });
 
   const hasFilter = searchName || searchInvNo || searchLocation || searchCategory || searchSerial || statusFilter !== 'all';
-
   const clearFilters = () => {
     setSearchName(''); setSearchInvNo(''); setSearchLocation('');
     setSearchCategory(''); setSearchSerial(''); setStatusFilter('all');
   };
 
-  // ── Filter history ────────────────────────────────────────────────────────
+  // ── History filter ────────────────────────────────────────────────────────
   const filteredHistory = history.filter(h => {
     const q = histSearch.toLowerCase();
     return !q ||
@@ -240,7 +281,7 @@ const LocationMovement = () => {
       h.Note?.toLowerCase().includes(q);
   });
 
-  // ── Select ────────────────────────────────────────────────────────────────
+  // ── Select (assets tab) ───────────────────────────────────────────────────
   const toggleSelect = (id) =>
     setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const toggleSelectAll = () =>
@@ -253,7 +294,13 @@ const LocationMovement = () => {
       await api.post('/locations/move', { assetId, fromLocation, toLocation, note });
       showToast(`ย้ายสำเร็จ → ${toLocation}`);
       setShowModal(false);
-      await Promise.all([fetchAssets(), fetchHistory()]);
+      // Refresh all data
+      await Promise.all([fetchLocations(), fetchAssets(), fetchHistory()]);
+      // If detail panel is open, refresh its asset list
+      if (selectedLoc) {
+        const res = await assetAPI.getAll();
+        setLocAssets(res.data.filter(a => a.Location === selectedLoc.Location));
+      }
     } catch (err) {
       showToast(err.response?.data?.error || 'ย้ายไม่สำเร็จ', 'error');
     } finally { setMoving(false); }
@@ -275,7 +322,7 @@ const LocationMovement = () => {
       showToast(`ย้าย ${toMove.length} รายการ → ${toLocation} สำเร็จ`);
       setShowBulk(false);
       setSelectedIds([]);
-      await Promise.all([fetchAssets(), fetchHistory()]);
+      await Promise.all([fetchLocations(), fetchAssets(), fetchHistory()]);
     } catch (err) {
       showToast(err.response?.data?.error || 'ย้ายไม่สำเร็จ', 'error');
     } finally { setMoving(false); }
@@ -288,8 +335,8 @@ const LocationMovement = () => {
       {/* Toast */}
       {toast && (
         <div className={`fixed top-5 right-5 z-50 flex items-center gap-3 px-5 py-3 rounded-xl shadow-lg text-sm font-medium
-          ${toast.type==='error'?'bg-red-600 text-white':'bg-gray-900 text-white'}`}>
-          {toast.type==='error'?<AlertTriangle size={16}/>:<CheckCircle2 size={16}/>}
+          ${toast.type === 'error' ? 'bg-red-600 text-white' : 'bg-gray-900 text-white'}`}>
+          {toast.type === 'error' ? <AlertTriangle size={16}/> : <CheckCircle2 size={16}/>}
           {toast.message}
         </div>
       )}
@@ -297,19 +344,18 @@ const LocationMovement = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">ย้ายสถานที่ทรัพย์สิน</h1>
+          <h1 className="text-2xl font-bold text-gray-900">สถานที่ / โอนย้าย</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            ทั้งหมด <span className="font-medium text-gray-700">{assets.length}</span> รายการ
-            {filteredAssets.length !== assets.length && ` · แสดง ${filteredAssets.length} รายการ`}
+            {locations.length} สถานที่ · {totalLocAssets} รายการ
             {selectedIds.length > 0 && <span className="text-blue-600 ml-2">· เลือก {selectedIds.length} รายการ</span>}
           </p>
         </div>
         <div className="flex gap-2">
-          <button onClick={() => { fetchAssets(); fetchHistory(); }}
+          <button onClick={() => { fetchLocations(); fetchAssets(); fetchHistory(); }}
             className="p-2 rounded-xl hover:bg-gray-100 text-gray-400 transition-colors" title="รีเฟรช">
             <RefreshCw size={16}/>
           </button>
-          {canMove && selectedIds.length > 0 && (
+          {canMove && selectedIds.length > 0 && activeTab === 'assets' && (
             <button onClick={() => setShowBulk(true)}
               className="flex items-center gap-2 px-4 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-xl hover:bg-orange-600 transition-colors shadow-sm">
               <Truck size={16}/> ย้ายพร้อมกัน ({selectedIds.length})
@@ -321,23 +367,204 @@ const LocationMovement = () => {
       {/* Tabs */}
       <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
         {[
-          { key: 'assets',  label: 'รายการทรัพย์สิน', icon: Package },
-          { key: 'history', label: 'ประวัติการย้าย',   icon: History },
+          { key: 'locations', label: 'สถานที่',       icon: MapPin  },
+          { key: 'assets',    label: 'โอนย้าย',       icon: Truck   },
+          { key: 'history',   label: 'ประวัติ',        icon: History },
         ].map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg transition-colors
-              ${activeTab===tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+              ${activeTab === tab.key ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
             <tab.icon size={15}/> {tab.label}
           </button>
         ))}
       </div>
 
-      {/* ── Tab: Assets ── */}
+      {/* ── Tab: Locations ── */}
+      {activeTab === 'locations' && (
+        <div className={`flex gap-4 items-start`}>
+
+          {/* Left: location list */}
+          <div className={`flex flex-col gap-4 transition-all ${selectedLoc ? 'w-80 flex-shrink-0' : 'flex-1'}`}>
+            {/* Stats row (only when not in split mode) */}
+            {!selectedLoc && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 mb-1">สถานที่ทั้งหมด</p>
+                  <p className="text-2xl font-bold text-gray-900">{locations.length}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
+                  <p className="text-xs text-gray-500 mb-1">ทรัพย์สินที่ระบุสถานที่</p>
+                  <p className="text-2xl font-bold text-gray-900">{totalLocAssets}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Search */}
+            <div className="relative">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+              <input
+                type="text"
+                placeholder="ค้นหาสถานที่..."
+                value={locSearch}
+                onChange={e => setLocSearch(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              />
+            </div>
+
+            {/* Location table */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              {loadingLocs ? (
+                <div className="flex items-center justify-center gap-2 py-20 text-gray-400">
+                  <Loader2 size={18} className="animate-spin"/> กำลังโหลด...
+                </div>
+              ) : filteredLocations.length === 0 ? (
+                <div className="py-20 text-center">
+                  <MapPin size={32} className="mx-auto text-gray-300 mb-3"/>
+                  <p className="text-gray-400 text-sm">{locSearch ? 'ไม่พบสถานที่ที่ตรงกัน' : 'ยังไม่มีข้อมูลสถานที่'}</p>
+                </div>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      {(selectedLoc
+                        ? ['สถานที่', 'จำนวน', '']
+                        : ['#', 'สถานที่', 'จำนวนทรัพย์สิน']
+                      ).map((h, i) => (
+                        <th key={i} className="px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wide text-left">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {filteredLocations.map((loc, i) => {
+                      const active = selectedLoc?.Location === loc.Location;
+                      return (
+                        <tr
+                          key={loc.Location}
+                          onClick={() => active ? closeDetail() : openLocation(loc)}
+                          className={`cursor-pointer transition-colors ${active ? 'bg-blue-50' : 'hover:bg-gray-50'}`}
+                        >
+                          {!selectedLoc && (
+                            <td className="px-4 py-3 text-gray-400 tabular-nums w-10">{i + 1}</td>
+                          )}
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center gap-1.5 text-sm font-medium ${active ? 'text-blue-700' : 'text-gray-800'}`}>
+                              <MapPin size={13} className={active ? 'text-blue-500' : 'text-amber-500'}/>
+                              {loc.Location}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${active ? 'bg-blue-100 text-blue-800' : 'bg-amber-50 text-amber-700'}`}>
+                              {loc.AssetCount} รายการ
+                            </span>
+                          </td>
+                          {selectedLoc && (
+                            <td className="px-3 py-3">
+                              <ChevronRight size={14} className={active ? 'text-blue-500' : 'text-gray-300'}/>
+                            </td>
+                          )}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+
+          {/* Right: asset detail panel */}
+          {selectedLoc && (
+            <div className="flex-1 bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 bg-gray-50">
+                <div className="flex items-center gap-2">
+                  <MapPin size={15} className="text-amber-500"/>
+                  <span className="font-semibold text-gray-800">{selectedLoc.Location}</span>
+                  <span className="text-xs text-gray-400">({selectedLoc.AssetCount} รายการ)</span>
+                </div>
+                <button onClick={closeDetail} className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-400 transition-colors">
+                  <X size={14}/>
+                </button>
+              </div>
+
+              {/* Asset search */}
+              <div className="px-4 py-3 border-b border-gray-100">
+                <div className="relative">
+                  <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
+                  <input
+                    type="text"
+                    placeholder="ค้นหาทรัพย์สิน..."
+                    value={locAssetSearch}
+                    onChange={e => setLocAssetSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Asset list */}
+              <div className="overflow-y-auto max-h-[60vh]">
+                {loadingLocAssets ? (
+                  <div className="flex items-center justify-center gap-2 py-16 text-gray-400">
+                    <Loader2 size={16} className="animate-spin"/> กำลังโหลด...
+                  </div>
+                ) : filteredLocAssets.length === 0 ? (
+                  <div className="py-16 text-center">
+                    <Package size={28} className="mx-auto text-gray-300 mb-2"/>
+                    <p className="text-gray-400 text-sm">{locAssetSearch ? 'ไม่พบรายการที่ตรงกัน' : 'ไม่มีทรัพย์สินในสถานที่นี้'}</p>
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-white border-b border-gray-100">
+                      <tr>
+                        {['#', 'Inv No', 'ชื่อทรัพย์สิน', 'หมวดหมู่', 'สถานะ', canMove ? 'ย้าย' : ''].map((h, i) => (
+                          <th key={i} className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wide text-left">{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredLocAssets.map((a, i) => {
+                        const s = STATUS[a.Status] || STATUS[1];
+                        return (
+                          <tr key={a.Id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-2.5 text-gray-400 tabular-nums text-xs">{i + 1}</td>
+                            <td className="px-4 py-2.5">
+                              <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{a.InvNo || '-'}</span>
+                            </td>
+                            <td className="px-4 py-2.5 font-medium text-gray-900">{a.Name}</td>
+                            <td className="px-4 py-2.5">
+                              {a.Category
+                                ? <span className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full">{a.Category}</span>
+                                : <span className="text-gray-400 text-xs">-</span>}
+                            </td>
+                            <td className="px-4 py-2.5">
+                              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${s.color}`}>
+                                {s.label}
+                              </span>
+                            </td>
+                            {canMove && (
+                              <td className="px-4 py-2.5">
+                                <button
+                                  onClick={() => { setSelectedAsset(a); setShowModal(true); }}
+                                  className="flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-blue-700 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors">
+                                  <Truck size={11}/> ย้าย
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Assets (move) ── */}
       {activeTab === 'assets' && (
         <>
-          {/* Search & Filter */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-3">
-            {/* Quick search */}
             <div className="flex gap-3">
               <div className="relative flex-1">
                 <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -359,15 +586,13 @@ const LocationMovement = () => {
                 </button>
               )}
             </div>
-
-            {/* Advanced filters */}
             {showFilters && (
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-1 border-t border-gray-100">
                 {[
-                  { icon: Hash,    placeholder: 'InvNo',         value: searchInvNo,    set: setSearchInvNo    },
-                  { icon: MapPin,  placeholder: 'สถานที่',        value: searchLocation, set: setSearchLocation },
-                  { icon: Tag,     placeholder: 'หมวดหมู่',       value: searchCategory, set: setSearchCategory },
-                  { icon: Hash,    placeholder: 'Serial Number',  value: searchSerial,   set: setSearchSerial   },
+                  { icon: Hash,   placeholder: 'InvNo',        value: searchInvNo,    set: setSearchInvNo    },
+                  { icon: MapPin, placeholder: 'สถานที่',       value: searchLocation, set: setSearchLocation },
+                  { icon: Tag,    placeholder: 'หมวดหมู่',      value: searchCategory, set: setSearchCategory },
+                  { icon: Hash,   placeholder: 'Serial Number', value: searchSerial,   set: setSearchSerial   },
                 ].map((f, i) => (
                   <div key={i} className="relative">
                     <f.icon size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400"/>
@@ -387,7 +612,6 @@ const LocationMovement = () => {
             )}
           </div>
 
-          {/* Table */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
             {loading ? (
               <div className="flex items-center justify-center py-20">
@@ -422,9 +646,7 @@ const LocationMovement = () => {
                                 onChange={() => toggleSelect(asset.Id)} className="rounded border-gray-300"/>
                             )}
                           </td>
-                          <td className="px-4 py-3">
-                            <p className="font-medium text-gray-900">{asset.Name}</p>
-                          </td>
+                          <td className="px-4 py-3"><p className="font-medium text-gray-900">{asset.Name}</p></td>
                           <td className="px-4 py-3">
                             <span className="font-mono text-xs bg-gray-100 px-2 py-0.5 rounded">{asset.InvNo || '-'}</span>
                           </td>
@@ -475,7 +697,6 @@ const LocationMovement = () => {
       {/* ── Tab: History ── */}
       {activeTab === 'history' && (
         <>
-          {/* History search */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
             <div className="relative">
               <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/>
